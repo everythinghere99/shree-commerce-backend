@@ -19,15 +19,15 @@ app.post('/get-details', async (req, res) => {
         return res.status(400).json({ error: 'Sahi link daalo jisme http/https ho!' });
     }
 
-    // YAHAN APNI API KEY WAPAS DAALNA MAT BHOOLNA!
-    const SCRAPER_API_KEY = 'YAHAN_APNI_API_KEY_PASTE_KARO'; 
+    // YAHAN APNI SCRAPER API KEY WAPAS DAALNA!
+    const SCRAPER_API_KEY = 'abca8fa189724b83e922ae92dc6dc96b'; 
 
     try {
-        // Yahan &render=true add kiya hai taaki JS poora load ho sake (Asli magic yahi hai)
-        const targetUrl = `http://api.scraperapi.com?api_key=${SCRAPER_API_KEY}&url=${encodeURIComponent(url)}&render=true`;
+        // render=true hata diya hai taaki instant scan ho (Timeout error khatam)
+        const targetUrl = `http://api.scraperapi.com?api_key=${SCRAPER_API_KEY}&url=${encodeURIComponent(url)}`;
         
-        // Timeout thoda badha diya hai kyunki JS load hone me time lagta hai
-        const { data } = await axios.get(targetUrl, { timeout: 30000 });
+        // Timeout bada kar 60 seconds (60000ms) kar diya hai
+        const { data } = await axios.get(targetUrl, { timeout: 60000 });
         const $ = cheerio.load(data);
         
         const title = $('title').text().replace(' - Buy Online', '').trim() || 'Product Name nahi mila';
@@ -37,25 +37,31 @@ app.post('/get-details', async (req, res) => {
         let color = "Nahi mila";
         let price = "Nahi mila";
 
-        // Thoda aur deep scan kar rahe hain
-        $('*').each((i, el) => {
-            const text = $(el).text().trim().replace(/\s+/g, ' '); // Extra spaces hataye
-            const lowerText = text.toLowerCase();
-            
-            if ((lowerText.includes('fabric') || lowerText.includes('material')) && text.length < 40) {
-                fabric = text;
-            }
-            if ((lowerText.includes('size') || lowerText.match(/\b(s|m|l|xl|xxl|free size)\b/i)) && text.length < 25 && size === "Nahi mila") {
-                size = text;
-            }
-            if ((lowerText.includes('color') || lowerText.includes('colour')) && text.length < 30) {
-                color = text;
-            }
-            if ((lowerText.includes('₹') || lowerText.includes('rs')) && price === "Nahi mila" && text.length < 15) {
-                price = text;
-            }
-        });
-        
+        // TRICK 1: SEO Meta Tags se price nikalna (Fastest method)
+        if ($('meta[property="product:price:amount"]').length) {
+            price = "₹" + $('meta[property="product:price:amount"]').attr('content');
+        }
+
+        // TRICK 2: Server hang hone se bachane ke liye pure page ka ek sath text scan (Smart Regex)
+        // Background JS data (jaise Meesho ka) bhi text me aa jayega
+        const fullText = $('body').text().replace(/\s+/g, ' ').toLowerCase() + " " + $('script').text().toLowerCase();
+
+        // Regex se exact words dhoondh rahe hain
+        const fabricMatch = fullText.match(/fabric[\s:;=\-"]+([a-z\s]+)(?:<|"|,|\.)/i);
+        if (fabricMatch && fabricMatch[1]) fabric = fabricMatch[1].substring(0, 15).trim();
+
+        const colorMatch = fullText.match(/colou?r[\s:;=\-"]+([a-z\s]+)(?:<|"|,|\.)/i);
+        if (colorMatch && colorMatch[1]) color = colorMatch[1].substring(0, 15).trim();
+
+        const sizeMatch = fullText.match(/size[\s:;=\-"]+([a-z0-9\s,]+)(?:<|"|,|\.)/i);
+        if (sizeMatch && sizeMatch[1]) size = sizeMatch[1].substring(0, 15).trim();
+
+        // Agar price meta tag me na mile toh text se nikalna
+        if (price === "Nahi mila") {
+            const priceMatch = fullText.match(/₹\s*([0-9,]+)/);
+            if (priceMatch) price = "₹" + priceMatch[1];
+        }
+
         res.json({
             success: true,
             product: {
@@ -65,11 +71,11 @@ app.post('/get-details', async (req, res) => {
                 size: size,
                 color: color,
                 url: url,
-                message: "Deep scan complete! (With JS Rendering)"
+                message: "Instant Smart Scan Complete! 🚀"
             }
         });
     } catch (error) {
-        res.status(500).json({ error: 'Deep Scan fail ho gaya (Time out ya API limit)', details: error.message });
+        res.status(500).json({ error: 'Data laane me error aayi', details: error.message });
     }
 });
 
