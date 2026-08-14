@@ -5,28 +5,34 @@ const cheerio = require('cheerio');
 
 const app = express();
 
-// Ye tumhare frontend ko allow karega
 app.use(cors()); 
 app.use(express.json());
 
-// Check karne ke liye ki backend chal raha hai
 app.get('/', (req, res) => {
     res.send('Shree Store Backend is Live!');
 });
 
-// Main scraping logic
 app.post('/get-details', async (req, res) => {
     const { url } = req.body;
-    if (!url) return res.status(400).json({ error: 'Bhai, URL bhejna zaroori hai!' });
+    
+    // Check agar URL proper nahi hai
+    if (!url || !url.startsWith('http')) {
+        return res.status(400).json({ error: 'Sahi link daalo jisme http/https ho!' });
+    }
 
     try {
-        // Link se data nikalna
+        // Asli Chrome browser jaisi identity bhej rahe hain taaki block na ho
         const { data } = await axios.get(url, {
-            headers: { 'User-Agent': 'Mozilla/5.0' }
+            headers: { 
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1'
+            }
         });
         const $ = cheerio.load(data);
         
-        // Basic details nikalna (Isko baad me hum aur advance karenge)
         const title = $('title').text() || 'Product Name nahi mila';
         
         res.json({
@@ -34,11 +40,11 @@ app.post('/get-details', async (req, res) => {
             product: {
                 name: title,
                 url: url,
-                message: "Basic details aa gayi hain. Colors/Sizes exact platform par depend karenge."
+                message: "Success! Agar Name aa gaya matlab security bypass ho gayi."
             }
         });
     } catch (error) {
-        res.status(500).json({ error: 'Scraping me dikkat aayi', details: error.message });
+        res.status(500).json({ error: 'Website ne block kar diya (Security)', details: error.message });
     }
 });
 
