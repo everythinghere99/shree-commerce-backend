@@ -1,1 +1,1 @@
-# shree-commerce-backend
+# shree-store-backend
