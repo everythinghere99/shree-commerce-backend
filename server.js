@@ -22,50 +22,52 @@ app.post('/get-details', async (req, res) => {
     const SCRAPER_API_KEY = 'abca8fa189724b83e922ae92dc6dc96b'; 
 
     try {
-        // Yahan se &country_code=in hata diya hai taaki 401 error na aaye
         const targetUrl = `http://api.scraperapi.com?api_key=${SCRAPER_API_KEY}&url=${encodeURIComponent(url)}`;
-        
         const { data } = await axios.get(targetUrl, { timeout: 60000 });
         const $ = cheerio.load(data);
         
-        let title = $('h1').text().trim() || $('title').text().replace(' - Buy Online', '').trim() || 'Nahi mila';
+        // 1. Name: Screen par sabse pehla bada text (h1)
+        let title = $('h1').first().text().trim() || 'Nahi mila';
+        
+        // 2. Price: Screen par sabse pehla ₹ wala tag
+        let price = "Nahi mila";
+        $('h4, h5, span').each((i, el) => {
+            const text = $(el).text().trim();
+            // Sirf wahi text uthayega jo directly ₹ se shuru ho aur aage numbers hon (Jaise ₹317)
+            if (text.match(/^₹\s*\d+/) && price === "Nahi mila") {
+                price = text;
+            }
+        });
+
         let fabric = "Nahi mila";
         let size = "Nahi mila";
         let color = "Nahi mila";
-        let price = "Nahi mila";
 
-        const nextDataStr = $('#__NEXT_DATA__').html();
-        if (nextDataStr) {
-            try {
-                const nextData = JSON.parse(nextDataStr);
-                const mainProduct = nextData?.props?.pageProps?.initialState?.product?.details;
-                
-                if (mainProduct) {
-                    if (mainProduct.name) title = mainProduct.name;
-                    
-                    if (mainProduct.discounted_price) price = "₹" + mainProduct.discounted_price;
-                    else if (mainProduct.price) price = "₹" + mainProduct.price;
-
-                    if (mainProduct.valid_sizes && Array.isArray(mainProduct.valid_sizes)) {
-                        size = mainProduct.valid_sizes.join(", ");
-                    }
-
-                    const productStr = JSON.stringify(mainProduct).toLowerCase();
-                    const fMatch = productStr.match(/fabric["\s:]+([a-z\s]+)["\\]/i) || productStr.match(/material["\s:]+([a-z\s]+)["\\]/i);
-                    if (fMatch && fMatch[1]) fabric = fMatch[1].trim();
-
-                    const cMatch = productStr.match(/colou?r["\s:]+([a-z\s]+)["\\]/i);
-                    if (cMatch && cMatch[1]) color = cMatch[1].trim();
-                }
-            } catch (e) {
-                console.log("JSON Error");
+        // 3. Database se Size, Color aur Fabric (Sabse pehli entry uthayega)
+        const nextData = $('#__NEXT_DATA__').html();
+        if (nextData) {
+            // Exact sizes (S, M, L, XL)
+            const sizeMatch = nextData.match(/"valid_sizes"\s*:\s*\[(.*?)\]/);
+            if (sizeMatch && sizeMatch[1]) {
+                size = sizeMatch[1].replace(/"/g, '').trim(); 
             }
+
+            // Exact Color
+            const colorMatch = nextData.match(/"color"\s*:\s*"([^"]+)"/i) || nextData.match(/"Colour"\s*:\s*"([^"]+)"/i);
+            if (colorMatch && colorMatch[1]) color = colorMatch[1];
+
+            // Exact Fabric
+            const fabricMatch = nextData.match(/"fabric"\s*:\s*"([^"]+)"/i) || nextData.match(/"Material"\s*:\s*"([^"]+)"/i);
+            if (fabricMatch && fabricMatch[1]) fabric = fabricMatch[1];
         }
 
-        if (price === "Nahi mila") {
-            const priceText = $('h4').text() || $('h5').text();
-            const pMatch = priceText.match(/₹\s*(\d+)/);
-            if (pMatch) price = "₹" + pMatch[1];
+        // 4. Fallback (Agar API block kare aur text page aaye)
+        if (color === "Nahi mila" || fabric === "Nahi mila") {
+            $('span, p').each((i, el) => {
+                const text = $(el).text();
+                if (text.includes('Color :') && color === "Nahi mila") color = text.split('Color :')[1].trim();
+                if (text.includes('Fabric :') && fabric === "Nahi mila") fabric = text.split('Fabric :')[1].trim();
+            });
         }
 
         res.json({
@@ -77,14 +79,12 @@ app.post('/get-details', async (req, res) => {
                 size: size,
                 color: color,
                 url: url,
-                message: "Main Product Scan Complete! 🚀"
+                message: "Visual Hybrid Scan Complete! 👀"
             }
         });
     } catch (error) {
         let exactError = error.message;
-        if (error.response) {
-            exactError = `ScraperAPI Issue (Status ${error.response.status}).`;
-        }
+        if (error.response) exactError = `ScraperAPI Issue (Status ${error.response.status}).`;
         res.status(500).json({ error: `Data laane me error aayi -> ${exactError}` });
     }
 });
