@@ -19,84 +19,61 @@ app.post('/get-details', async (req, res) => {
         return res.status(400).json({ error: 'Sahi link daalo jisme http/https ho!' });
     }
 
-    // YAHAN APNI SCRAPER API KEY WAPAS DAALNA!
-    const SCRAPER_API_KEY = 'abca8fa189724b83e922ae92dc6dc96b'; 
+    // Tumhari API Key
+    const SCRAPER_API_KEY = 'Abca8fa189724b83e922ae92dc6dc96b'; 
 
     try {
         const targetUrl = `http://api.scraperapi.com?api_key=${SCRAPER_API_KEY}&url=${encodeURIComponent(url)}`;
         const { data } = await axios.get(targetUrl, { timeout: 60000 });
         const $ = cheerio.load(data);
         
-        let title = $('title').text().replace(' - Buy Online', '').trim() || 'Product Name nahi mila';
+        // h1 me hamesha exact main product ka naam hota hai
+        let title = $('h1').text().trim() || $('title').text().replace(' - Buy Online', '').trim() || 'Nahi mila';
         let fabric = "Nahi mila";
         let size = "Nahi mila";
         let color = "Nahi mila";
         let price = "Nahi mila";
 
-        // Asli Hidden Database nikalna
-        const nextData = $('#__NEXT_DATA__').html();
-        
-        if (nextData) {
+        // TARGETED MEESHO EXTRACTOR: Sirf aur sirf main product ka data uthayega
+        const nextDataStr = $('#__NEXT_DATA__').html();
+        if (nextDataStr) {
             try {
-                const jsonData = JSON.parse(nextData);
+                const nextData = JSON.parse(nextDataStr);
                 
-                // Ye function database me hamesha "First" value dhoondhega (Main Product ki)
-                function findFirstKey(obj, keyToFind) {
-                    let result = null;
-                    function search(node) {
-                        if (result !== null) return;
-                        if (node !== null && typeof node === 'object') {
-                            if (keyToFind in node) {
-                                result = node[keyToFind];
-                                return;
-                            }
-                            Object.values(node).forEach(search);
-                        }
+                // Ye exact path hai jahan Meesho apna main product rakhta hai (No recommendations)
+                const mainProduct = nextData?.props?.pageProps?.initialState?.product?.details;
+                
+                if (mainProduct) {
+                    if (mainProduct.name) title = mainProduct.name;
+                    
+                    // Exact price (Pehle discount check karega)
+                    if (mainProduct.discounted_price) price = "₹" + mainProduct.discounted_price;
+                    else if (mainProduct.price) price = "₹" + mainProduct.price;
+
+                    // Exact sizes
+                    if (mainProduct.valid_sizes && Array.isArray(mainProduct.valid_sizes)) {
+                        size = mainProduct.valid_sizes.join(", ");
                     }
-                    search(jsonData);
-                    return result;
+
+                    // Color & Fabric nikalne ke liye sirf main product ki details scan kar rahe hain
+                    const productStr = JSON.stringify(mainProduct).toLowerCase();
+                    
+                    const fMatch = productStr.match(/fabric["\s:]+([a-z\s]+)["\\]/i) || productStr.match(/material["\s:]+([a-z\s]+)["\\]/i);
+                    if (fMatch && fMatch[1]) fabric = fMatch[1].trim();
+
+                    const cMatch = productStr.match(/colou?r["\s:]+([a-z\s]+)["\\]/i);
+                    if (cMatch && cMatch[1]) color = cMatch[1].trim();
                 }
-
-                // 1. Exact Price nikalna (Discounted Price pehle dekhega)
-                const discountedPrice = findFirstKey(jsonData, 'discounted_price');
-                const normalPrice = findFirstKey(jsonData, 'price');
-                
-                if (discountedPrice) price = "₹" + discountedPrice;
-                else if (normalPrice) price = "₹" + normalPrice;
-
-                // 2. Exact Details (Fabric, Color) nikalna
-                const detailsArray = findFirstKey(jsonData, 'details');
-                if (Array.isArray(detailsArray)) {
-                    detailsArray.forEach(item => {
-                        const itemName = (item.name || "").toLowerCase();
-                        const itemValue = item.value || item.description || "";
-                        if (itemName.includes('fabric') || itemName.includes('material')) {
-                            fabric = itemValue;
-                        }
-                        if (itemName.includes('color') || itemName.includes('colour')) {
-                            color = itemValue;
-                        }
-                    });
-                }
-
-                // 3. Exact Size nikalna
-                const sizesArray = findFirstKey(jsonData, 'valid_sizes');
-                if (Array.isArray(sizesArray)) {
-                    size = sizesArray.join(', '); // ["S", "M"] ko S, M bana dega
-                }
-
             } catch (e) {
-                console.log("JSON Parse Error");
+                console.log("JSON Error");
             }
         }
 
-        // Agar JSON database se nahi mila, to seedha UI se exact line uthayega
-        if (color === "Nahi mila" || fabric === "Nahi mila") {
-            $('span').each((i, el) => {
-                const text = $(el).text();
-                if (text.includes('Color :') && color === "Nahi mila") color = text.split('Color :')[1].trim();
-                if (text.includes('Fabric :') && fabric === "Nahi mila") fabric = text.split('Fabric :')[1].trim();
-            });
+        // Fallback (Agar kuch chhoot jaye)
+        if (price === "Nahi mila") {
+            const priceText = $('h4').text() || $('h5').text();
+            const pMatch = priceText.match(/₹\s*(\d+)/);
+            if (pMatch) price = "₹" + pMatch[1];
         }
 
         res.json({
@@ -108,7 +85,7 @@ app.post('/get-details', async (req, res) => {
                 size: size,
                 color: color,
                 url: url,
-                message: "Targeted Scan Complete! 🎯"
+                message: "Meesho Premium Bypass Successful! 🚀"
             }
         });
     } catch (error) {
