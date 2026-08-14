@@ -15,22 +15,18 @@ app.get('/', (req, res) => {
 app.post('/get-details', async (req, res) => {
     const { url } = req.body;
     
-    // Check agar URL proper nahi hai
     if (!url || !url.startsWith('http')) {
         return res.status(400).json({ error: 'Sahi link daalo jisme http/https ho!' });
     }
 
+    // YAHAN APNI COPIED API KEY DAALNI HAI (Inverted commas ke andar)
+    const SCRAPER_API_KEY = 'abca8fa189724b83e922ae92dc6dc96b'; 
+
     try {
-        // Asli Chrome browser jaisi identity bhej rahe hain taaki block na ho
-        const { data } = await axios.get(url, {
-            headers: { 
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1'
-            }
-        });
+        // ScraperAPI ka use kar rahe hain taaki security bypass ho jaye
+        const targetUrl = `http://api.scraperapi.com?api_key=${SCRAPER_API_KEY}&url=${encodeURIComponent(url)}`;
+        
+        const { data } = await axios.get(targetUrl);
         const $ = cheerio.load(data);
         
         const title = $('title').text() || 'Product Name nahi mila';
@@ -40,11 +36,11 @@ app.post('/get-details', async (req, res) => {
             product: {
                 name: title,
                 url: url,
-                message: "Success! Agar Name aa gaya matlab security bypass ho gayi."
+                message: "Boom! Security bypass ho gayi."
             }
         });
     } catch (error) {
-        res.status(500).json({ error: 'Website ne block kar diya (Security)', details: error.message });
+        res.status(500).json({ error: 'Bypass fail ho gaya', details: error.message });
     }
 });
 
