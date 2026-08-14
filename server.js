@@ -19,48 +19,57 @@ app.post('/get-details', async (req, res) => {
         return res.status(400).json({ error: 'Sahi link daalo jisme http/https ho!' });
     }
 
-    // YAHAN APNI SCRAPER API KEY WAPAS DAALNA!
+    // YAHAN APNI SCRAPER API KEY WAPAS DAAL LENA!
     const SCRAPER_API_KEY = 'abca8fa189724b83e922ae92dc6dc96b'; 
 
     try {
-        // render=true hata diya hai taaki instant scan ho (Timeout error khatam)
         const targetUrl = `http://api.scraperapi.com?api_key=${SCRAPER_API_KEY}&url=${encodeURIComponent(url)}`;
         
-        // Timeout bada kar 60 seconds (60000ms) kar diya hai
+        // Timeout 60 sec rakha hai
         const { data } = await axios.get(targetUrl, { timeout: 60000 });
         const $ = cheerio.load(data);
         
-        const title = $('title').text().replace(' - Buy Online', '').trim() || 'Product Name nahi mila';
-        
+        let title = $('title').text().replace(' - Buy Online', '').trim() || 'Product Name nahi mila';
         let fabric = "Nahi mila";
         let size = "Nahi mila";
         let color = "Nahi mila";
         let price = "Nahi mila";
 
-        // TRICK 1: SEO Meta Tags se price nikalna (Fastest method)
-        if ($('meta[property="product:price:amount"]').length) {
-            price = "₹" + $('meta[property="product:price:amount"]').attr('content');
-        }
-
-        // TRICK 2: Server hang hone se bachane ke liye pure page ka ek sath text scan (Smart Regex)
-        // Background JS data (jaise Meesho ka) bhi text me aa jayega
-        const fullText = $('body').text().replace(/\s+/g, ' ').toLowerCase() + " " + $('script').text().toLowerCase();
-
-        // Regex se exact words dhoondh rahe hain
-        const fabricMatch = fullText.match(/fabric[\s:;=\-"]+([a-z\s]+)(?:<|"|,|\.)/i);
-        if (fabricMatch && fabricMatch[1]) fabric = fabricMatch[1].substring(0, 15).trim();
-
-        const colorMatch = fullText.match(/colou?r[\s:;=\-"]+([a-z\s]+)(?:<|"|,|\.)/i);
-        if (colorMatch && colorMatch[1]) color = colorMatch[1].substring(0, 15).trim();
-
-        const sizeMatch = fullText.match(/size[\s:;=\-"]+([a-z0-9\s,]+)(?:<|"|,|\.)/i);
-        if (sizeMatch && sizeMatch[1]) size = sizeMatch[1].substring(0, 15).trim();
-
-        // Agar price meta tag me na mile toh text se nikalna
-        if (price === "Nahi mila") {
-            const priceMatch = fullText.match(/₹\s*([0-9,]+)/);
+        // TRICK 1: Meesho & Modern Sites ka Hidden "Next.js" Data nikalna (No Reviews, No Ads)
+        const nextData = $('#__NEXT_DATA__').html();
+        if (nextData) {
+            // Asli discounted price dhoondhna
+            const priceMatch = nextData.match(/"discounted_price"\s*:\s*(\d+)/) || nextData.match(/"price"\s*:\s*(\d+)/);
             if (priceMatch) price = "₹" + priceMatch[1];
+
+            // Fabric / Material dhoondhna
+            const fabricMatch = nextData.match(/"(?:Fabric|Material)"\s*:\s*"([^"]+)"/i) || nextData.match(/Fabric\s*:\s*([A-Za-z\s]+)(?:\\n|")/i);
+            if (fabricMatch) fabric = fabricMatch[1].trim();
+
+            // Color dhoondhna
+            const colorMatch = nextData.match(/"(?:Color|Colour)"\s*:\s*"([^"]+)"/i) || nextData.match(/Color\s*:\s*([A-Za-z\s]+)(?:\\n|")/i);
+            if (colorMatch) color = colorMatch[1].trim();
+
+            // Exact Sizes dhoondhna (e.g., ["S","M","L"])
+            const sizeMatch = nextData.match(/"valid_sizes"\s*:\s*\[(.*?)\]/);
+            if (sizeMatch && sizeMatch[1]) {
+                size = sizeMatch[1].replace(/"/g, '').trim(); // "S","M" ko S,M bana dega
+            }
         }
+
+        // TRICK 2: Amazon/Myntra ke liye Schema Data (Fallback)
+        $('script[type="application/ld+json"]').each((i, el) => {
+            try {
+                const json = JSON.parse($(el).html());
+                let product = Array.isArray(json) ? json.find(x => x['@type'] === 'Product') : json;
+                
+                if (product && product['@type'] === 'Product') {
+                    if (product.name && title === 'Product Name nahi mila') title = product.name;
+                    if (product.offers && product.offers.price && price === "Nahi mila") price = "₹" + product.offers.price;
+                    if (product.color && color === "Nahi mila") color = product.color;
+                }
+            } catch (e) {}
+        });
 
         res.json({
             success: true,
@@ -71,7 +80,7 @@ app.post('/get-details', async (req, res) => {
                 size: size,
                 color: color,
                 url: url,
-                message: "Instant Smart Scan Complete! 🚀"
+                message: "Asli Database Hack Complete! 🔥"
             }
         });
     } catch (error) {
