@@ -19,38 +19,39 @@ app.post('/get-details', async (req, res) => {
         return res.status(400).json({ error: 'Sahi link daalo jisme http/https ho!' });
     }
 
-    // YAHAN APNI SCRAPER API KEY DAALO
-    const SCRAPER_API_KEY = 'abca8fa189724b83e922ae92dc6dc96b'; 
+    // YAHAN APNI API KEY WAPAS DAALNA MAT BHOOLNA!
+    const SCRAPER_API_KEY = 'YAHAN_APNI_API_KEY_PASTE_KARO'; 
 
     try {
-        const targetUrl = `http://api.scraperapi.com?api_key=${SCRAPER_API_KEY}&url=${encodeURIComponent(url)}`;
-        const { data } = await axios.get(targetUrl);
+        // Yahan &render=true add kiya hai taaki JS poora load ho sake (Asli magic yahi hai)
+        const targetUrl = `http://api.scraperapi.com?api_key=${SCRAPER_API_KEY}&url=${encodeURIComponent(url)}&render=true`;
+        
+        // Timeout thoda badha diya hai kyunki JS load hone me time lagta hai
+        const { data } = await axios.get(targetUrl, { timeout: 30000 });
         const $ = cheerio.load(data);
         
-        // 1. Name nikalna
-        const title = $('title').text() || 'Product Name nahi mila';
+        const title = $('title').text().replace(' - Buy Online', '').trim() || 'Product Name nahi mila';
         
-        // 2. Smart Search for Details (Size, Fabric, Color)
         let fabric = "Nahi mila";
         let size = "Nahi mila";
         let color = "Nahi mila";
         let price = "Nahi mila";
 
-        // Page ke sabhi text elements ko scan karke details dhoondna
-        $('span, p, div, li').each((i, el) => {
-            const text = $(el).text().trim();
+        // Thoda aur deep scan kar rahe hain
+        $('*').each((i, el) => {
+            const text = $(el).text().trim().replace(/\s+/g, ' '); // Extra spaces hataye
             const lowerText = text.toLowerCase();
             
-            if (lowerText.includes('fabric:') || lowerText.includes('material:')) {
-                fabric = text.substring(0, 30); // Lamba text cut karne ke liye
+            if ((lowerText.includes('fabric') || lowerText.includes('material')) && text.length < 40) {
+                fabric = text;
             }
-            if (lowerText.includes('size') && text.length < 20) {
+            if ((lowerText.includes('size') || lowerText.match(/\b(s|m|l|xl|xxl|free size)\b/i)) && text.length < 25 && size === "Nahi mila") {
                 size = text;
             }
-            if (lowerText.includes('color:') || lowerText.includes('colour:')) {
-                color = text.substring(0, 20);
+            if ((lowerText.includes('color') || lowerText.includes('colour')) && text.length < 30) {
+                color = text;
             }
-            if (lowerText.includes('₹') && price === "Nahi mila" && text.length < 15) {
+            if ((lowerText.includes('₹') || lowerText.includes('rs')) && price === "Nahi mila" && text.length < 15) {
                 price = text;
             }
         });
@@ -64,11 +65,11 @@ app.post('/get-details', async (req, res) => {
                 size: size,
                 color: color,
                 url: url,
-                message: "Basic scan complete!"
+                message: "Deep scan complete! (With JS Rendering)"
             }
         });
     } catch (error) {
-        res.status(500).json({ error: 'Bypass fail ho gaya', details: error.message });
+        res.status(500).json({ error: 'Deep Scan fail ho gaya (Time out ya API limit)', details: error.message });
     }
 });
 
