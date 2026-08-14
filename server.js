@@ -22,8 +22,8 @@ app.post('/get-details', async (req, res) => {
     const SCRAPER_API_KEY = 'Abca8fa189724b83e922ae92dc6dc96b'; 
 
     try {
-        // Asli Hack: Meesho sirf India me chalta hai, isliye country_code=in add kiya hai!
-        const targetUrl = `http://api.scraperapi.com?api_key=${SCRAPER_API_KEY}&url=${encodeURIComponent(url)}&country_code=in`;
+        // Yahan se &country_code=in hata diya hai taaki 401 error na aaye
+        const targetUrl = `http://api.scraperapi.com?api_key=${SCRAPER_API_KEY}&url=${encodeURIComponent(url)}`;
         
         const { data } = await axios.get(targetUrl, { timeout: 60000 });
         const $ = cheerio.load(data);
@@ -77,11 +77,10 @@ app.post('/get-details', async (req, res) => {
                 size: size,
                 color: color,
                 url: url,
-                message: "Indian IP Bypass Successful! 🇮🇳🚀"
+                message: "Main Product Scan Complete! 🚀"
             }
         });
     } catch (error) {
-        // Agar ab error aaya toh exactly screen par likha aayega ki problem kya hai
         let exactError = error.message;
         if (error.response) {
             exactError = `ScraperAPI Issue (Status ${error.response.status}).`;
