@@ -19,7 +19,7 @@ app.post('/get-details', async (req, res) => {
         return res.status(400).json({ error: 'Sahi link daalo jisme http/https ho!' });
     }
 
-    const SCRAPER_API_KEY = 'Abca8fa189724b83e922ae92dc6dc96b'; 
+    const SCRAPER_API_KEY = 'abca8fa189724b83e922ae92dc6dc96b'; 
 
     try {
         // Yahan se &country_code=in hata diya hai taaki 401 error na aaye
